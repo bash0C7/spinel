@@ -331,6 +331,10 @@ void sp_sig_unblock(int a, int b) {
   sigprocmask(SIG_UNBLOCK, &m, 0);   /* one thread: the same mask */
 #endif
 }
+/* The report itself, not only its installation below, stands behind
+   SP_NO_SIGNALS: it reads siginfo_t's si_addr, which a target with no
+   signals (newlib) does not declare. */
+#ifndef SP_NO_SIGNALS
 static void sp_fiber_fault_write(const char *s) { size_t n = strlen(s); while (n) { ssize_t w = write(2, s, n); if (w <= 0) break; s += w; n -= (size_t)w; } }
 static void sp_fiber_fault_write_num(size_t v) { char b[24]; int i = (int)sizeof b; b[--i] = 0; do { b[--i] = (char)('0' + v % 10); v /= 10; } while (v); sp_fiber_fault_write(b + i); }
 /* The handler this one stands in front of: the GC verifier's fault report,
@@ -410,6 +414,7 @@ static void sp_fiber_fault_handler(int sig, siginfo_t *si, void *uctx) {
   if (sp_fiber_fault_chain) { sp_fiber_fault_chain(sig); return; }   /* the verifier's report */
   signal(sig, SIG_DFL);
 }
+#endif /* !SP_NO_SIGNALS */
 void (*sp_stack_overflow_raise_fn)(void) = 0;
 SP_TLS char *sp_thread_stack_lo = 0;
 SP_TLS char *sp_thread_stack_hi = 0;
