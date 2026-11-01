@@ -58,7 +58,7 @@ RBS_SRC      = $(wildcard $(RBS_DIR)/src/*.c) $(wildcard $(RBS_DIR)/src/util/*.c
 RBS_OBJ      = $(patsubst $(RBS_DIR)/src/%.c,build/rbs/%.o,$(RBS_SRC))
 RBS_LIB      = build/librbs.a
 
-.PHONY: ty-setter-check imemo-shadow-test imemo-shadow-corpus int-min-test all hooks share-strings-test line-map-check unit-stability-test incremental-test incremental-bench gate-tool-test regexp wasm-rt wasm-test rbs_extract rbs-test rbs-seed-test inline-rbs-test rbs-seed-extractor cident plan-check-test timing-test shadow-check signal-default-test source-marker-test magic-comment-test repr-check-test run-scale-test gate-costs arm-check-test traits-check-test poly-cold-test bop-arity-check-test bop-callbacks-test bop-share-check-test share-spec-check bop-callbacks-check arity-spec-check value-edges-check value-edges-regen implied-calls-check implied-calls-regen implied-calls-test lower-rows-check node-kinds-check node-kinds-regen package-facts-check package-facts-regen value-pos-test re-lit-test reject-test cli-opts-test link-names-test reach-test defer-refusals-test check-stores-test backtrace-test gc-minor-test thread-puts-test ext-test ext-cruby-test alloc-report-test rubyspec rubyspec-gate spin-check \ repr-diff c-costs alloc-diff \
+.PHONY: ty-setter-check imemo-shadow-test imemo-shadow-corpus int-min-test all hooks share-strings-test line-map-check unit-stability-test incremental-test incremental-bench gate-tool-test regexp wasm-rt wasm-test rbs_extract rbs-test rbs-seed-test inline-rbs-test rbs-seed-extractor cident plan-check-test timing-test shadow-check signal-default-test source-marker-test magic-comment-test repr-check-test run-scale-test gate-costs arm-check-test traits-check-test poly-cold-test bop-arity-check-test bop-callbacks-test bop-share-check-test share-spec-check bop-callbacks-check arity-spec-check value-edges-check value-edges-regen implied-calls-check implied-calls-regen implied-calls-test lower-rows-check node-kinds-check node-kinds-regen package-facts-check package-facts-regen value-pos-test re-lit-test reject-test cli-opts-test link-names-test reach-test defer-refusals-test check-stores-test backtrace-test gc-minor-test thread-puts-test ext-test ext-cruby-test newlib-test alloc-report-test rubyspec rubyspec-gate spin-check \ repr-diff c-costs alloc-diff \
         test test-run clean-test-results regen-rbs-expected \
         regen-expected regen-expected-err bench optcarrot gate gate-full check gate-legs gate-test gate-bench gc-phases-test gc-stress-test gc-str-major-test gc-str-budget-test threaded-render-test gc-locality-test test-corpus test-corpus-summary \
         gate-optcarrot rubyboy gate-rubyboy scale-test clean install uninstall deps tools
@@ -1636,7 +1636,7 @@ test: lib/spinel_rt_responds_generated.h $(SPINEL_TIMEOUT) cext-header-test cext
 # The actual run. rbs-test golden-checks the RBS extractor (cheap, C-only).
 # rbs-seed-test checks the seeds actually reach the analyzer (incl. nested
 # classes, #1417).
-test-run: int-min-test timing-test signal-default-test source-marker-test magic-comment-test rbs-test rbs-seed-test inline-rbs-test re-lit-test value-pos-test value-edges-check implied-calls-check implied-calls-test node-kinds-check package-facts-check reject-test cli-opts-test link-names-test reach-test defer-refusals-test check-stores-test backtrace-test gc-minor-test gc-phases-test gc-stress-test gc-threshold-test gc-none-test gc-obj-budget-test gc-str-budget-test gc-str-major-test threaded-render-test gc-locality-test byref-capture-test thread-puts-test ext-test ext-cruby-test test-corpus-summary
+test-run: int-min-test timing-test signal-default-test source-marker-test magic-comment-test rbs-test rbs-seed-test inline-rbs-test re-lit-test value-pos-test value-edges-check implied-calls-check implied-calls-test node-kinds-check package-facts-check reject-test cli-opts-test link-names-test reach-test defer-refusals-test check-stores-test backtrace-test gc-minor-test gc-phases-test gc-stress-test gc-threshold-test gc-none-test gc-obj-budget-test gc-str-budget-test gc-str-major-test threaded-render-test gc-locality-test byref-capture-test thread-puts-test ext-test ext-cruby-test newlib-test test-corpus-summary
 
 # The test/*.rb corpus (and the bundled packages') on its own, without the
 # C-side legs: what a 32-bit target runs (`make test-corpus CC='cc -m32'`),
@@ -1745,6 +1745,46 @@ ext-cruby-test: $(SPINEL) $(SP_RT_LIB)
 	fi; \
 	rm -rf "$$tmp"; \
 	if [ $$ok -eq 1 ]; then echo "ext-cruby-test: pass"; else exit 1; fi
+
+# newlib-test: the runtime on a board's newlib (lib/newlib, docs/newlib.md),
+# 32-bit. Every runtime source and test/newlib/kernel.rb's --ext-init library
+# compile with NEWLIB_CC against lib/newlib's stand-ins and the board config,
+# with no implicit declaration (an error from GCC 14 on); the host links with
+# --gc-sections and without, and runs under NEWLIB_RUN (semihosting), its
+# output CRuby's. Skips cleanly without the compiler or the runner.
+NEWLIB_CC ?= arm-none-eabi-gcc
+NEWLIB_RUN ?= qemu-arm
+NEWLIB_ARCH ?= -mcpu=cortex-a9 -marm
+NEWLIB_CFLAGS = $(NEWLIB_ARCH) -O2 -ffunction-sections -fdata-sections -Werror=implicit-function-declaration \
+                -D_DEFAULT_SOURCE -include lib/newlib/sp_newlib_config.h -Ilib/newlib -Ilib -Ilib/regexp -Ilib/regexp/shim
+newlib-test: $(SPINEL) $(SPINEL_TIMEOUT)
+	@if ! command -v $(NEWLIB_CC) >/dev/null 2>&1; then echo "newlib-test: skipped (no $(NEWLIB_CC))"; exit 0; fi; \
+	tmp=$$(mktemp -d /tmp/spinel-newlib.XXXXXX); ok=1; \
+	$(SPINEL) test/newlib/kernel.rb -c --no-line-map --ext-init Init_newlib_kernel \
+	  --ext-entry NewlibKernel.ulaw_decode,NewlibKernel.glyph16,NewlibKernel.spin,NewlibKernel.must_pos \
+	  -o "$$tmp/k.c" >/dev/null 2>&1 || { echo "newlib-test: FAIL (emission)"; ok=0; }; \
+	defs=$$($(SPINEL) test/newlib/kernel.rb --print-build 2>/dev/null | sed -n 's/^define //p' | tr '\n' ' '); \
+	if [ $$ok -eq 1 ]; then \
+	  for f in "$$tmp/k.c" test/newlib/host.c lib/*.c lib/regexp/*.c lib/newlib/*.c; do \
+	    o="$$tmp/$$(echo $$f | tr '/' '_').o"; \
+	    $(NEWLIB_CC) -c $(NEWLIB_CFLAGS) $$defs -I"$$tmp" "$$f" -o "$$o" 2>"$$tmp/cc.err" || \
+	      { echo "newlib-test: FAIL ($$f did not compile)"; sed -n 1,4p "$$tmp/cc.err"; ok=0; }; \
+	  done; \
+	fi; \
+	if [ $$ok -eq 1 ]; then \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) --specs=rdimon.specs -Wl,--gc-sections "$$tmp"/*.o -lm -o "$$tmp/gc.elf" 2>"$$tmp/ld.err" || \
+	    { echo "newlib-test: FAIL (link with --gc-sections)"; sed -n 1,4p "$$tmp/ld.err"; ok=0; }; \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) --specs=rdimon.specs "$$tmp"/*.o -lm -o "$$tmp/all.elf" 2>"$$tmp/ld.err" || \
+	    { echo "newlib-test: FAIL (link without --gc-sections)"; sed -n 1,4p "$$tmp/ld.err"; ok=0; }; \
+	fi; \
+	if [ $$ok -eq 1 ] && command -v $(NEWLIB_RUN) >/dev/null 2>&1; then \
+	  for e in gc all; do \
+	    $(TIMEOUT10) $(NEWLIB_RUN) "$$tmp/$$e.elf" > "$$tmp/out" 2>&1; \
+	    cmp -s "$$tmp/out" test/newlib/expected || { echo "newlib-test: FAIL ($$e.elf output)"; diff -u test/newlib/expected "$$tmp/out" || true; ok=0; }; \
+	  done; \
+	elif [ $$ok -eq 1 ]; then echo "newlib-test: built; not run (no $(NEWLIB_RUN))"; fi; \
+	rm -rf "$$tmp"; \
+	if [ $$ok -eq 1 ]; then echo "newlib-test: pass"; else exit 1; fi
 
 # wrap-test: test/wrap/*.rb are compiled with --int-overflow=wrap and run
 # against their .expected, which is Spinel's own: CRuby never wraps, so a
