@@ -87,8 +87,14 @@ int sp_gc_str_major_sched = 1;
    does not describe them: pinning that gate changed the old generation from
    57.2 MB to 11.5 MB with the reported full count identical at 6. */
 size_t sp_gc_str_majors = 0;
-size_t sp_str_old_threshold = 1024 * 1024;
-size_t sp_str_old_threshold_init = 1024 * 1024;
+/* The first major trigger of the old string generation. A build can set it
+   with -DSP_STR_OLD_THRESHOLD_INIT=<bytes>: on a board whose heap is smaller
+   than the 1 MB default, the heap runs out before the first major. */
+#ifndef SP_STR_OLD_THRESHOLD_INIT
+#define SP_STR_OLD_THRESHOLD_INIT (1024 * 1024)
+#endif
+size_t sp_str_old_threshold = SP_STR_OLD_THRESHOLD_INIT;
+size_t sp_str_old_threshold_init = SP_STR_OLD_THRESHOLD_INIT;
 /* How many string sweeps between majors, and the count that drives it. The cadence is a COUNT rather than a size because a
    size gate re-aimed from the old list is aimed at a number the same gate
    produced: a small budget promotes early, promotion is one-way until a major,
@@ -183,8 +189,14 @@ static size_t sp_str_live_total(void) {
   return sp_str_heap_bytes + sp_str_old_total();
 #endif
 }
-size_t sp_str_threshold = 256 * 1024;
-size_t sp_str_threshold_init = 256 * 1024;
+/* The first collection trigger of the string heap, the same knob as
+   SP_STR_OLD_THRESHOLD_INIT (-DSP_STR_THRESHOLD_INIT=<bytes>);
+   SPINEL_GC_THRESHOLD_STR_KB still floors it at run time. */
+#ifndef SP_STR_THRESHOLD_INIT
+#define SP_STR_THRESHOLD_INIT (256 * 1024)
+#endif
+size_t sp_str_threshold = SP_STR_THRESHOLD_INIT;
+size_t sp_str_threshold_init = SP_STR_THRESHOLD_INIT;
 int sp_str_stress_checked = 0;
 
 const char sp_str_empty_data[] = "\xff";
@@ -212,8 +224,14 @@ SP_TLS int sp_ffi_bin_len = 0;   /* see sp_alloc.h: byte count for :binstr / :cb
 
 /* Object-heap collection threshold (was per-TU static in spinel_rt.h; now
    shared so sp_gc_alloc can live in sp_alloc.h and lib TUs allocate too). */
-size_t sp_gc_threshold = 256 * 1024;
-size_t sp_gc_threshold_init = 256 * 1024;
+/* The first collection trigger of the object heap, the same knob as
+   SP_STR_OLD_THRESHOLD_INIT (-DSP_GC_THRESHOLD_INIT=<bytes>);
+   SPINEL_GC_THRESHOLD_OBJ_KB still floors it at run time. */
+#ifndef SP_GC_THRESHOLD_INIT
+#define SP_GC_THRESHOLD_INIT (256 * 1024)
+#endif
+size_t sp_gc_threshold = SP_GC_THRESHOLD_INIT;
+size_t sp_gc_threshold_init = SP_GC_THRESHOLD_INIT;
 int sp_gc_stress_checked = 0;
 /* Stress pins the threshold instead of merely seeding it: the retunes float
    the trigger to live*4 with the base as a FLOOR, so on any program whose
@@ -1327,7 +1345,9 @@ static sp_AllocStat sp_alloc_stats[SP_ALLOC_STATS];
 /* Type names live in their own table: one entry per scan fn, independent of
    how many sites allocate it. */
 typedef struct { void *key; const char *name; } sp_AllocName;
+#ifndef SP_ALLOC_NAMES   /* SPINEL_ALLOC_REPORT's type-name table, as SP_ALLOC_STATS above */
 #define SP_ALLOC_NAMES 512
+#endif
 static sp_AllocName sp_alloc_names[SP_ALLOC_NAMES];
 
 static const char *sp_alloc_name_of(void *key) {

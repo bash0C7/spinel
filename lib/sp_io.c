@@ -1124,7 +1124,7 @@ sp_IntArray *sp_File_winsize(sp_File *f) {
    not a terminal raises tcgetattr's Errno (ENOTTY), as CRuby's does. Answers
    the slot the saved settings sit in, for the restore; nested modes take a
    slot each. */
-#if defined(__wasi__) || defined(_WIN32)
+#if defined(__wasi__) || defined(_WIN32) || defined(SP_NO_TERMIOS)
 /* No termios: no handle is a terminal whose mode can be set. */
 sp_int sp_File_tty_mode(sp_File *f, sp_int kind) {
   (void)kind;
