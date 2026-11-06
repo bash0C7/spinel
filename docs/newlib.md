@@ -54,7 +54,8 @@ Link with `--gc-sections`: what the program never reaches (the socket layer,
   raises.
 - **No signals.** `<signal.h>` here defines `SP_NO_SIGNALS`: the stack
   overflow report is not installed, and an overflow is the platform's (a
-  FreeRTOS stack canary, a hard fault).
+  FreeRTOS stack canary, a hard fault). ESP-IDF's newlib has no `signal()`;
+  the weak one here records nothing and answers `SIG_DFL`.
 - **No `Fiber`, `Enumerator#next` or green threads**: a fiber has no stack to
   run on, and its first resume raises `FiberError` ("failed to allocate fiber
   stack"), which a `rescue` catches.

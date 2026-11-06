@@ -96,6 +96,10 @@ SP_WEAK_FN int sigaction(int sig, const struct sigaction *act, struct sigaction 
   if (old) memset(old, 0, sizeof *old);
   return 0;
 }
+SP_WEAK_FN void (*signal(int sig, void (*fn)(int)))(int) {
+  (void)sig; (void)fn;
+  return SIG_DFL;
+}
 SP_WEAK_FN int sigprocmask(int how, const sigset_t *set, sigset_t *old) {
   (void)how; (void)set;
   if (old) memset(old, 0, sizeof *old);
