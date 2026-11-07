@@ -1,48 +1,77 @@
 # Bare-metal boards with newlib (`lib/newlib`)
 
-**Community-maintained, best effort.** It may lag behind master, CI does
-not build it, and nothing in the gate waits on it. It lives in
-`lib/newlib/`, `test/newlib/` and the `newlib-test` target, apart from the
-runtime's `-D` switches it sets, which change nothing unless a build
-defines them, so a maintainer can remove it cheaply if it stands in the way
-of a POSIX change.
+**Community-maintained, best effort.** It is kept working by its users, not
+by Spinel's maintainers: it may lag behind `master`, and nothing in CI waits
+on it. It lives in `lib/newlib/`, `test/newlib/` and the `newlib-test`
+target, so a maintainer can remove it cheaply if it stands in the way of a
+POSIX change.
 
 ```sh
 spinel --cc=$CC kernel.rb -c --ext-init kernel_init --ext-entry Kernel.run -o kernel.c
-$CC -c $BOARD_FLAGS -O2 -ffunction-sections -fdata-sections -ffp-contract=off \
-    -Ilib/newlib -DSP_NO_SIGNALS -DSP_NO_TERMIOS \
-    -include lib/newlib/sp_newlib_config.h \
-    -Ilib -Ilib/regexp -Ilib/regexp/shim \
-    $(spinel --cc=$CC kernel.rb --print-build | sed -n 's/^define //p') \
-    kernel.c lib/*.c lib/regexp/*.c lib/newlib/*.c
+$CC -c $BOARD_FLAGS -O2 -ffunction-sections -fdata-sections -Ilib/regexp/shim \
+    $(spinel --cc=$CC kernel.rb --print-build | sed -n 's/^cflag //p; s/^define //p; s/^include /-I/p') \
+    kernel.c lib/*.c lib/regexp/*.c
 $CC $BOARD_FLAGS -Wl,--gc-sections *.o your_board.o -lm -o firmware.elf
 ```
 
 The runtime builds for a microcontroller whose C library is newlib, with
-the board's own cross compiler: an Arm Cortex-M or -A toolchain, or another
-`*-elf` GCC. Spinel emits the C on the host as usual (`-c`, typically with
-`--ext-init` and `--ext-entry`, see [spin.md](spin.md)), and the board's
-build compiles it and the runtime sources together into its firmware.
+the board's own cross compiler. Spinel emits the C on the host as usual
+(`-c`, typically with `--ext-init` and `--ext-entry`, see
+[spin.md](spin.md)), and the board's build compiles it and the runtime
+sources together into its firmware.
 
 ## What you need
 
-- A cross compiler whose C library is newlib, such as arm-none-eabi-gcc.
-  An SDK that puts its own POSIX layer on the include path, such as ESP-IDF
-  with lwIP and its VFS, is not covered, nor is picolibc.
+- A cross compiler whose C library is newlib, such as arm-none-eabi-gcc or
+  an ESP32 toolchain's gcc.
 - The system calls any newlib program needs from the board (`_write`,
   `_read`, `_sbrk`, `_gettimeofday`, ...): the board's own, or semihosting
   (`--specs=rdimon.specs`).
 - `--cc=$CC` on both `spinel` runs. Spinel takes the Integer width from
-  that compiler; without it a literal past `2**31` is a wrong number on a
-  32-bit board ([int-overflow.md](int-overflow.md)).
-- The flags above, for the generated C and the runtime alike. The table
-  sizes must agree between them: `SP_GC_STACK_MAX` sizes a table both
-  read, and a different `SP_EXC_STACK_MAX` or `SP_CATCH_STACK_MAX` fails
-  the link. Of `--print-build`, pass the `define` lines and
-  `-ffp-contract=off`.
-- `-Wl,--gc-sections` on the link. Without it the code a program never
-  reaches (the socket layer, `Dir`, `Process`) and its tables stay in the
-  image and in RAM.
+  that compiler, and the flags below from that compiler's newlib.
+- The `cflag`, `define` and `include` lines of `--print-build` on every
+  file built from Spinel, the generated C and the runtime sources alike: the
+  table sizes must agree between them.
+- `-Wl,--gc-sections` on the link.
+
+## What `--print-build` adds
+
+For a compiler whose C library is newlib and that predefines none of
+`__unix__`, `__APPLE__` and `_WIN32`:
+
+| Line | Effect |
+|---|---|
+| `include .../lib/newlib` | the headers described below |
+| `define -DSP_NO_SIGNALS` | no signal handler is installed: `trap` is accepted and never runs, and a stack overflow is the board's (a stack canary, a hard fault) |
+| `define -DSP_NO_TERMIOS` | `IO#raw` and `IO#noecho` raise `Errno::ENOTTY` |
+| `define -DSP_NO_DIRENT` | only when that compiler's `<dirent.h>` does not compile: no directory can be opened |
+| `cflag -include .../lib/newlib/sp_newlib_config.h` | the table sizes below |
+
+It leaves out `-falign-functions=64` and `-falign-loops=64`, and refuses a
+program that uses `Thread`, `Mutex`, `Queue` or `ConditionVariable`: the
+runtime there is single-threaded.
+
+## The headers
+
+Each header in `lib/newlib/` reads the environment's header of the same
+name first, the toolchain's or an SDK's, and adds only what that header
+leaves out. A header the environment does not have is replaced by one whose
+calls fail: sockets, `poll`, `mmap`, `ucontext` and `ioctl`. So the slab
+allocator is off and every block is a `malloc`, `IO::Buffer.map` raises
+`SystemCallError` (`ENOSYS`), and `Fiber.new`, or stepping an
+`Enumerator.new` block by `next`, raises `FiberError`. Without
+`_POSIX_TIMERS`, every clock reads `gettimeofday`, `CLOCK_MONOTONIC`
+included, and `sleep` spins on it.
+
+No file in `lib/newlib/` defines a C library function: what the board
+defines is what the firmware links.
+
+## A call the board does not define
+
+newlib declares calls whose definition it leaves to the board, such as
+`getcwd`, `getuid`, `pipe` and `fork`. A program that reaches one links
+only where the board defines it; elsewhere the link names it
+(``undefined reference to `getcwd'``).
 
 ## Table sizes
 
@@ -66,72 +95,27 @@ command line wins.
 Past `SP_EXC_STACK_MAX`, a `begin` stops the program with "stack level too
 deep" and a `rescue` body with "rescue nesting too deep".
 
-## What is different on this target
-
-- **`Integer` is the pointer width**, 32 bits on a 32-bit board, as on
-  wasm32 ([int-overflow.md](int-overflow.md)). A value past it is a
-  Bignum.
-- **No virtual memory.** `mmap` fails, so the slab allocator is off and
-  every block is a `malloc`; `IO::Buffer.map` raises `SystemCallError`
-  (`ENOSYS`).
-- **No signals.** A signal's `trap` is accepted and never runs, and the
-  stack-overflow handler is not installed, so an overflow is the board's
-  (a stack canary, a hard fault).
-- **No `Fiber` or `Thread`.** `Fiber.new` raises `FiberError` ("failed to
-  allocate fiber stack"), which a `rescue` catches, and so does stepping
-  an `Enumerator.new` block, by `next` or `take`. `next` on an enumerator
-  over an Array, a Range or `each_slice` works. A program that uses
-  `Thread`, `Mutex`, `Queue` or `ConditionVariable` is refused at
-  `--print-build`: newlib has no pthreads.
-- **No terminal modes.** `IO#raw` and `IO#noecho` raise `Errno::ENOTTY`.
-- **No sockets, processes, directories or user database** unless the board
-  defines the calls. A socket raises `Errno::ENOTSUP`, a name lookup
-  `Socket::ResolutionError`, `Process.spawn` `SystemCallError` (`ENOSYS`),
-  `Process.wait` `Errno::ECHILD`, `Dir.entries` and `Dir.new`
-  `Errno::ENOENT`. `Process.uid` and the other ids are 0, and `Dir.pwd` is
-  `/`.
-- **Clocks.** Every clock reads `gettimeofday`, `CLOCK_MONOTONIC`
-  included, and `sleep` spins on it.
-- **One thread.** The GCC atomic helpers that cores without atomic
-  instructions call (Cortex-M0+, and Cortex-M3/M4/M33 for 8 bytes) are
-  plain reads and writes. An interrupt handler or a second core must not
-  call into the runtime.
-
-## The pieces
-
-- `lib/newlib/` holds a stand-in for each POSIX header the runtime includes
-  that newlib leaves out or leaves short: sockets, `poll`, `mmap`,
-  `ucontext`, `ioctl`, resource limits, the clocks, `getline`, `lstat`.
-  They are written against the newlib arm-none-eabi-gcc ships. A stand-in
-  for a header newlib has reads it with `#include_next` and adds what it
-  lacks; `<sys/dirent.h>` does not, because newlib's is an `#error` on a
-  board without a filesystem layer. Only a newlib build sees the directory
-  (`-Ilib/newlib`).
-- `lib/newlib/sp_newlib.c` defines, weakly, the calls a stand-in declares
-  and the POSIX calls newlib declares without defining. A board replaces
-  one by defining it in an object file on the link line; a definition in
-  an archive replaces it only when the linker takes that member for another
-  symbol. A board's `opendir` returns `lib/newlib/sys/dirent.h`'s `DIR`.
-- `lib/newlib/sp_newlib_config.h` is the table above.
+`Integer` is the pointer width, 32 bits on a 32-bit board, as on wasm32
+([int-overflow.md](int-overflow.md)). A value past it is a Bignum.
 
 ## Tests
 
 `make newlib-test` builds every runtime source with `NEWLIB_CC` (default
-`arm-none-eabi-gcc`) for `NEWLIB_ARCH` (default `-mcpu=cortex-a9 -marm`)
-and runs these under `NEWLIB_RUN` (default `qemu-arm`):
+`arm-none-eabi-gcc`) for `NEWLIB_ARCH` (default `-mcpu=cortex-a9 -marm`),
+with the flags `--print-build` gives, and runs these under `NEWLIB_RUN`
+(default `qemu-arm`):
 
 - `test/newlib/kernel.rb`, as an `--ext-init` library that
-  `test/newlib/host.c` calls, linked with and without `--gc-sections`,
-  against `test/newlib/expected`.
+  `test/newlib/host.c` calls, against `test/newlib/expected`.
 - Every other `test/newlib/*.rb`, as a program, against its
   `.rb.expected`. `sensor_log.rb` prints what CRuby prints, and
-  `differences.rb` prints what the list above says each method answers.
+  `differences.rb` prints what the sections above say each method answers.
 
 It also checks that `--print-build` refuses a `Thread` program.
 
 It skips without the compiler, its newlib or the emulator;
-`NEWLIB_REQUIRED=1` makes that a failure. It is not in the gate or CI. An
-M-profile core (Cortex-M33, Cortex-M0+) runs as:
+`NEWLIB_REQUIRED=1` makes that a failure. An M-profile core (Cortex-M33,
+Cortex-M0+) runs as:
 
 ```sh
 make newlib-test NEWLIB_ARCH="-mcpu=cortex-m33 -mthumb" NEWLIB_RUN="qemu-arm -cpu cortex-m33"
