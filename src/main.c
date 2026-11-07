@@ -891,6 +891,21 @@ static void miscompile_errors(Str *cmd) {
              "-Werror=implicit-function-declaration ");
 }
 
+static int cc_newlib_without_threads(const char *cc) {
+  char q[1024];
+  snprintf(q, sizeof q, "printf '#include <unistd.h>\\n' | %s -E -dM -x c - 2>/dev/null", cc);
+  FILE *fp = popen(q, "r");
+  if (!fp) return 0;
+  int newlib = 0, threads = 0;
+  char line[512];
+  while (fgets(line, sizeof line, fp)) {
+    if (!strncmp(line, "#define __NEWLIB__ ", 19)) newlib = 1;
+    if (!strncmp(line, "#define _POSIX_THREADS ", 23)) threads = 1;
+  }
+  pclose(fp);
+  return newlib && !threads;
+}
+
 int main(int argc, char **argv) {
 #ifdef SP_WORK_COUNT
   atexit(work_report);
@@ -1480,6 +1495,11 @@ int main(int argc, char **argv) {
       if (c_is_temp) remove(c_path);
       return 1;
     }
+  }
+  if (uses_threads && !sp_streq(cc_cmd, "cc") && cc_newlib_without_threads(cc_cmd)) {
+    fprintf(stderr, "spinel: Thread, Mutex, Queue and ConditionVariable are not available on newlib\n");
+    if (c_is_temp) remove(c_path);
+    return 1;
   }
 
   /* Output binary path: -E uses a temp so the cwd stays clean. */
