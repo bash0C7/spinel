@@ -36,6 +36,9 @@ Start here, then open the topic you need.
 - **[wasm.md](wasm.md)** -- `--target=wasm32-wasi`: the program as a
   WebAssembly module for wasmtime, Node or a browser, what it needs (the
   wasi-sdk, `make wasm-rt`) and what the target does without.
+- **[newlib.md](newlib.md)** -- the runtime on a bare-metal board whose C
+  library is newlib: the board's build line and the flags `--print-build`
+  gives it, the headers `lib/newlib/` adds, and the table sizes.
 - **[portability.md](portability.md)** -- the GNU C extensions behind
   `lib/sp_compat.h`, their standard C fallbacks, `make PORTABLE=1` to build
   with every fallback, and what still needs a GNU-compatible compiler.
