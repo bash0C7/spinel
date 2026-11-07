@@ -1782,6 +1782,60 @@ ext-cruby-test: $(SPINEL) $(SP_RT_LIB)
 	rm -rf "$$tmp"; \
 	if [ $$ok -eq 1 ]; then echo "ext-cruby-test: pass"; else exit 1; fi
 
+.PHONY: newlib-test
+NEWLIB_CC ?= arm-none-eabi-gcc
+NEWLIB_RUN ?= qemu-arm
+NEWLIB_ARCH ?= -mcpu=cortex-a9 -marm
+NEWLIB_LDFLAGS = --specs=rdimon.specs -Wl,-z,max-page-size=0x1000
+NEWLIB_PROGRAMS = $(filter-out test/newlib/kernel.rb,$(wildcard test/newlib/*.rb))
+newlib-test: $(SPINEL) $(SPINEL_TIMEOUT)
+	@skip() { if [ -n "$(NEWLIB_REQUIRED)" ]; then echo "newlib-test: FAIL ($$1, and NEWLIB_REQUIRED is set)"; exit 1; fi; echo "newlib-test: skipped ($$1)"; exit 0; }; \
+	command -v $(NEWLIB_CC) >/dev/null 2>&1 || skip "no $(NEWLIB_CC)"; \
+	case "$$($(NEWLIB_CC) -print-file-name=libc.a)" in /*) ;; *) skip "no newlib for $(NEWLIB_CC)";; esac; \
+	command -v $(firstword $(NEWLIB_RUN)) >/dev/null 2>&1 || skip "no $(firstword $(NEWLIB_RUN))"; \
+	tmp=$$(mktemp -d /tmp/spinel-newlib.XXXXXX); ok=1; \
+	cc1() { $(NEWLIB_CC) -c $(NEWLIB_ARCH) $(COPT) -ffunction-sections -fdata-sections -Werror=implicit-function-declaration \
+	    -Ilib/regexp/shim $$1 -I"$$2" "$$3" -o "$$2/$$(echo $$3 | tr '/' '_').o" 2>"$$2/cc.err" && return; \
+	  echo "newlib-test: FAIL ($$3 did not compile)"; sed -n 1,4p "$$2/cc.err"; return 1; }; \
+	rt() { rtd="$$tmp/rt$$(printf '%s' "$$1" | cksum | cut -d' ' -f1)"; \
+	  if [ -d "$$rtd" ]; then [ ! -f "$$rtd/failed" ]; return; fi; mkdir "$$rtd"; \
+	  for f in lib/*.c lib/regexp/*.c; do cc1 "$$1" "$$rtd" "$$f" || : > "$$rtd/failed"; done; \
+	  [ ! -f "$$rtd/failed" ]; }; \
+	defs_of() { $(SPINEL) "$$1" --cc=$(NEWLIB_CC) --print-build 2>/dev/null | sed -n 's/^cflag //p; s/^define //p; s/^include /-I/p' | tr '\n' ' '; }; \
+	k="$$tmp/kernel"; mkdir "$$k"; \
+	if $(SPINEL) test/newlib/kernel.rb --cc=$(NEWLIB_CC) -c --no-line-map --ext-init Init_newlib_kernel \
+	     --ext-entry NewlibKernel.ulaw_decode,NewlibKernel.glyph16,NewlibKernel.spin,NewlibKernel.must_pos \
+	     -o "$$k/k.c" >/dev/null 2>&1; then \
+	  defs=$$(defs_of test/newlib/kernel.rb); \
+	  rt "$$defs" && cc1 "$$defs" "$$k" "$$k/k.c" && cc1 "$$defs" "$$k" test/newlib/host.c || ok=0; \
+	else echo "newlib-test: FAIL (emission) test/newlib/kernel.rb"; ok=0; fi; \
+	if [ $$ok -eq 1 ]; then \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) -Wl,--gc-sections "$$k"/*.o "$$rtd"/*.o -lm -o "$$k/k.elf" 2>"$$k/ld.err" || \
+	    { echo "newlib-test: FAIL (link) test/newlib/kernel.rb"; grep -m4 'undefined reference\|error' "$$k/ld.err"; ok=0; }; \
+	fi; \
+	if [ $$ok -eq 1 ]; then \
+	  $(TIMEOUT10) $(NEWLIB_RUN) "$$k/k.elf" > "$$k/out" 2>&1; \
+	  cmp -s "$$k/out" test/newlib/expected || { echo "newlib-test: FAIL (kernel.rb output)"; diff -u test/newlib/expected "$$k/out" || true; ok=0; }; \
+	fi; \
+	for t in $(NEWLIB_PROGRAMS); do \
+	  bn=$$(basename $$t .rb); p="$$tmp/$$bn"; mkdir "$$p"; \
+	  if ! $(SPINEL) $$t --cc=$(NEWLIB_CC) -c --no-line-map -o "$$p/$$bn.c" >/dev/null 2>"$$p/build"; then \
+	    echo "newlib-test: FAIL (emission) $$t"; head -3 "$$p/build"; ok=0; continue; fi; \
+	  pdefs=$$(defs_of $$t); \
+	  rt "$$pdefs" && cc1 "$$pdefs" "$$p" "$$p/$$bn.c" || { ok=0; continue; }; \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) -Wl,--gc-sections "$$p"/*.o "$$rtd"/*.o -lm -o "$$p/$$bn.elf" 2>"$$p/ld.err" || \
+	    { echo "newlib-test: FAIL (link) $$t"; grep -m4 'undefined reference\|error' "$$p/ld.err"; ok=0; continue; }; \
+	  ( cd "$$p" && $(abspath $(SPINEL_TIMEOUT)) 10 $(NEWLIB_RUN) "./$$bn.elf" > out 2> err < /dev/null ); \
+	  cat "$$p/err" >> "$$p/out"; \
+	  if cmp -s "$$p/out" $$t.expected; then echo "newlib-test: pass $$t"; \
+	  else echo "newlib-test: FAIL $$t"; diff -u $$t.expected "$$p/out" | head -20; ok=0; fi; \
+	done; \
+	if $(SPINEL) -e 'Thread.new { }.join' --cc=$(NEWLIB_CC) --print-build >/dev/null 2>"$$tmp/thread.err" || \
+	   ! grep -q 'not available on newlib' "$$tmp/thread.err"; then \
+	  echo "newlib-test: FAIL (a Thread program was not refused)"; ok=0; fi; \
+	rm -rf "$$tmp"; \
+	if [ $$ok -eq 1 ]; then echo "newlib-test: pass"; else exit 1; fi
+
 # wrap-test: test/wrap/*.rb are compiled with --int-overflow=wrap and run
 # against their .expected, which is Spinel's own: CRuby never wraps, so a
 # program that lands on -2**63 by shifting or by a wrapping `+ - *` has no

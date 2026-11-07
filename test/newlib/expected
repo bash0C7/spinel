@@ -1,0 +1,6 @@
+ulaw_decode 2530480890
+glyph16 984355632
+spin 6151
+must_pos raised ArgumentError: needs a positive number below 4000000000
+collected yes
+pointer 32 bits
