@@ -70,7 +70,10 @@ For a compiler whose C library is newlib and that predefines none of
 
 It leaves out `-falign-functions=64` and `-falign-loops=64`, and refuses a
 program that uses `Thread`, `Mutex`, `Queue` or `ConditionVariable`: the
-runtime there is single-threaded.
+runtime there is single-threaded. Its GC roots, exception frames and heap
+are one set for the whole firmware, so one call into it runs at a time: a
+second core, another task or an interrupt handler calls an entry only after
+the running call has returned.
 
 ## The headers
 
