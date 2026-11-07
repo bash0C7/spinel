@@ -29,9 +29,10 @@ sources together into its firmware.
   (`--specs=rdimon.specs`).
 - `--cc=$CC` on both `spinel` runs. Spinel takes the Integer width from
   that compiler, and the flags below from that compiler's newlib.
-- The `cflag`, `define` and `include` lines of `--print-build` on every
-  file built from Spinel, the generated C and the runtime sources alike: the
-  table sizes must agree between them.
+- The `cflag`, `define` and `include` lines of `--print-build` on the
+  generated C, the runtime sources and the board's file that includes the
+  generated header (`kernel.h`) alike: the table sizes must agree between
+  them.
 - `-Wl,--gc-sections` on the link.
 
 ## What `--print-build` adds
@@ -42,7 +43,7 @@ For a compiler whose C library is newlib and that predefines none of
 | Line | Effect |
 |---|---|
 | `include .../lib/newlib` | the headers described below |
-| `define -DSP_NO_SIGNALS` | no signal handler is installed: `trap` is accepted and never runs, and a stack overflow is the board's (a stack canary, a hard fault) |
+| `define -DSP_NO_SIGNALS` | no signal handler is installed: `trap` is accepted and never runs, a stack overflow is the board's (a stack canary, a hard fault), and the firmware links without `signal` or `sigaction` |
 | `define -DSP_NO_TERMIOS` | `IO#raw` and `IO#noecho` raise `Errno::ENOTTY` |
 | `define -DSP_NO_DIRENT` | only when that compiler's `<dirent.h>` does not compile: no directory can be opened |
 | `cflag -include .../lib/newlib/sp_newlib_config.h` | the table sizes below |
@@ -64,7 +65,9 @@ allocator is off and every block is a `malloc`, `IO::Buffer.map` raises
 included, and `sleep` spins on it.
 
 No file in `lib/newlib/` defines a C library function: what the board
-defines is what the firmware links.
+defines is what the firmware links. A macro in `lib/newlib/` stands only
+for a call the environment's headers do not declare, so a board's file that
+includes `kernel.h` calls the environment's own functions as before.
 
 ## A call the board does not define
 
