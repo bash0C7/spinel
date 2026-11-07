@@ -73,6 +73,7 @@ SP_WEAK int mprotect(void *a, size_t n, int prot) SP_NEWLIB_NOSYS(a, n, prot)
 SP_WEAK int madvise(void *a, size_t n, int advice) { (void)a; (void)n; (void)advice; return 0; }
 
 SP_WEAK int sigaction(int s, const struct sigaction *a, struct sigaction *o) SP_NEWLIB_NOSYS(s, a, o)
+SP_WEAK void (*signal(int s, void (*f)(int)))(int) { (void)s; (void)f; errno = ENOSYS; return SIG_ERR; }
 SP_WEAK int sigprocmask(int h, const sigset_t *s, sigset_t *o) { (void)h; (void)s; (void)o; return 0; }
 
 SP_WEAK int getcontext(ucontext_t *u) SP_NEWLIB_NOSYS(u)
