@@ -35,6 +35,26 @@ sources together into its firmware.
   them.
 - `-Wl,--gc-sections` on the link.
 
+## Several libraries
+
+One `spinel` run compiles every Spinel library in a firmware: a Ruby file
+that requires each of them, and one `--ext-entry` list naming every method
+the board calls.
+
+```ruby
+require_relative "lib_a"
+require_relative "lib_b"
+```
+
+```sh
+spinel --cc=$CC firmware.rb -c --ext-init Init_firmware --ext-entry LibA.twice,LibB.label -o firmware.c
+```
+
+The firmware then has one runtime and one `Init_firmware`. An entry's C
+types come from its signature (`#: (Integer) -> String`); with neither a
+signature nor a call in the Ruby, an argument is an `sp_RbVal`. Libraries compiled by separate runs each define
+the runtime's globals, and the firmware does not link.
+
 ## What `--print-build` adds
 
 For a compiler whose C library is newlib and that predefines none of
