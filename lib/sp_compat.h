@@ -353,7 +353,7 @@ __extension__ typedef unsigned __int128 sp_uint128;
 
 /* The threaded runtime needs them for its correctness, not its speed, so
    SP_PORTABLE keeps them there: its fallback is the single-threaded one. */
-#if defined(SP_PORTABLE) && !defined(SP_THREADS)
+#if (defined(SP_PORTABLE) || defined(SP_NO_SIGNALS)) && !defined(SP_THREADS)
 # define SP_ATOMICS_BUILTIN 0
 #elif SP_HAS_BUILTIN(__atomic_load_n) || SP_GNUC_PREREQ(4, 7) || defined(__clang__) || \
       (defined(SP_THREADS) && defined(__GNUC__))

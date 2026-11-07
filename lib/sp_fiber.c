@@ -342,10 +342,11 @@ void sp_sig_unblock(int a, int b) {
   sigset_t m; sigemptyset(&m); sigaddset(&m, a); if (b) sigaddset(&m, b);
 #ifdef SP_THREADS
   pthread_sigmask(SIG_UNBLOCK, &m, 0);
-#else
+#elif !defined(SP_NO_SIGNALS)
   sigprocmask(SIG_UNBLOCK, &m, 0);   /* one thread: the same mask */
 #endif
 }
+#ifndef SP_NO_SIGNALS
 static void sp_fiber_fault_write(const char *s) { size_t n = strlen(s); while (n) { ssize_t w = write(2, s, n); if (w <= 0) break; s += w; n -= (size_t)w; } }
 static void sp_fiber_fault_write_num(size_t v) { char b[24]; int i = (int)sizeof b; b[--i] = 0; do { b[--i] = (char)('0' + v % 10); v /= 10; } while (v); sp_fiber_fault_write(b + i); }
 /* The handler this one stands in front of: the GC verifier's fault report,
@@ -425,6 +426,7 @@ static void sp_fiber_fault_handler(int sig, siginfo_t *si, void *uctx) {
   if (sp_fiber_fault_chain) { sp_fiber_fault_chain(sig); return; }   /* the verifier's report */
   signal(sig, SIG_DFL);
 }
+#endif
 void (*sp_stack_overflow_raise_fn)(void) = 0;
 SP_TLS char *sp_thread_stack_lo = 0;
 SP_TLS char *sp_thread_stack_hi = 0;
@@ -724,7 +726,9 @@ static void sp_fiber_install_gc_hook(void){if(!sp_gc_mark_suspended_fibers_hook)
 #ifndef SP_FIBER_STACK_CACHE
 #define SP_FIBER_STACK_CACHE 32
 #endif
+#ifndef SP_FIBER_STACK_CACHE_MAX
 #define SP_FIBER_STACK_CACHE_MAX 1024
+#endif
 static char  *sp_stk_cache[SP_FIBER_STACK_CACHE_MAX];
 static size_t sp_stk_cache_sz[SP_FIBER_STACK_CACHE_MAX];
 static int    sp_stk_n = 0;

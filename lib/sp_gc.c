@@ -341,7 +341,9 @@ SP_CONSTRUCTOR static void sp_gc_debug_env(void){
     const char *sm = getenv("SPINEL_GC_STR_MAJOR");
     sp_gc_str_major_fixed = (sm && strcmp(sm, "fixed") == 0);
     sp_gc_str_major_sched = !(sm && strcmp(sm, "size") == 0); }
+#ifndef SP_NO_SIGNALS
   if (sp_gc_verify) { signal(SIGSEGV, sp_gc_fault_report); signal(SIGBUS, sp_gc_fault_report); }
+#endif
 }
 #endif
 
