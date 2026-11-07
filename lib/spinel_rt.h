@@ -9684,28 +9684,35 @@ static sp_RbVal sp_fmt_named_ref(sp_PolyArray *a, const char *nm, char nclose, c
    produced lines glued together ("1/10/0", then an empty line). The stream
    lock makes the pair atomic; the argument is already evaluated by the time
    it is called, so nothing that could park a green thread runs under it. */
+#if defined(SP_NO_SIGNALS) && !defined(SP_THREADS)
+#define SP_STDOUT_LOCK() ((void)0)
+#define SP_STDOUT_UNLOCK() ((void)0)
+#else
+#define SP_STDOUT_LOCK() flockfile(stdout)
+#define SP_STDOUT_UNLOCK() funlockfile(stdout)
+#endif
 static void sp_puts_line(const char *s) {
-  flockfile(stdout);
+  SP_STDOUT_LOCK();
   if (s) fputs(s, stdout);
   putc_unlocked('\n', stdout);
-  funlockfile(stdout);
+  SP_STDOUT_UNLOCK();
 }
 /* Kernel#puts on a C string (a to_s result): a trailing newline is not
    doubled. */
 static void sp_puts_cstr_line(const char *s) {
-  flockfile(stdout);
+  SP_STDOUT_LOCK();
   if (s) fputs(s, stdout);
   if (!s || !*s || s[strlen(s) - 1] != '\n') putc_unlocked('\n', stdout);
-  funlockfile(stdout);
+  SP_STDOUT_UNLOCK();
 }
 /* The same for a String value, sized by its header length so an embedded NUL
    is written. Reads s[-1], so it takes codegen-emitted Strings only. */
 static void sp_puts_str_line(const char *s) {
   size_t n = sp_str_byte_len(s);
-  flockfile(stdout);
+  SP_STDOUT_LOCK();
   if (s) fwrite(s, 1, n, stdout);
   if (!n || s[n - 1] != '\n') putc_unlocked('\n', stdout);
-  funlockfile(stdout);
+  SP_STDOUT_UNLOCK();
 }
 /* Kernel#print on a String value: every byte, an embedded NUL too. */
 static void sp_print_str_bin(const char *s) {
@@ -21602,6 +21609,7 @@ static SP_UNUSED void sp_sig_default_handler(int no) {
   sp_sig_default_raise(no);
 }
 static SP_UNUSED void sp_sig_install_defaults(void) {
+#ifndef SP_NO_SIGNALS
   static const int sigs[] = { SIGINT, SIGTERM };
   sp_sig_default_raiser = sp_sig_default_raise;
   for (int i = 0; i < 2; i++) {
@@ -21612,6 +21620,7 @@ static SP_UNUSED void sp_sig_install_defaults(void) {
     sigemptyset(&sa.sa_mask);
     sigaction(no, &sa, NULL);
   }
+#endif
 }
 #endif
 typedef struct { sp_RbVal obj; int which; int had; sp_RbVal ans; } sp_obj_conv_probe;

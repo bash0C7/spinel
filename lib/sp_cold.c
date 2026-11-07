@@ -4235,7 +4235,7 @@ void sp_sig_run_pending(void) {
     sigset_t m; sigemptyset(&m); sigaddset(&m, no);
 #ifdef SP_THREADS
     pthread_sigmask(SIG_BLOCK, &m, NULL);
-#else
+#elif !defined(SP_NO_SIGNALS)
     sigprocmask(SIG_BLOCK, &m, NULL);
 #endif
     sp_trap_call(p, no);
@@ -4305,12 +4305,14 @@ sp_RbVal sp_signal_trap(sp_RbVal sig, sp_RbVal handler) {SP_GC_ROOT_RBVAL(sig);S
       sp_sig_trapped = 1;
       if (sp_sched_threads_started()) sp_sig_thread_start();
 #endif
+#ifndef SP_NO_SIGNALS
       /* the handler only records the delivery (sp_sig_c_handler) */
       struct sigaction sa; memset(&sa, 0, sizeof sa);
       sa.sa_handler = sp_sig_c_handler;
       sigemptyset(&sa.sa_mask);
       sa.sa_flags = SA_RESTART;
       sigaction(no, &sa, NULL);
+#endif
     }
   }
   else {
@@ -4323,7 +4325,9 @@ sp_RbVal sp_signal_trap(sp_RbVal sig, sp_RbVal handler) {SP_GC_ROOT_RBVAL(sig);S
                       : ignore ? (&("\xff" "IGNORE")[1])
                       : strcmp(hs, "SYSTEM_DEFAULT") == 0 ? (&("\xff" "SYSTEM_DEFAULT")[1])
                       : (&("\xff" "DEFAULT")[1]);
+#ifndef SP_NO_SIGNALS
     if (no != 0) signal(no, ignore ? SIG_IGN : SIG_DFL);
+#endif
   }
   return prev;
 }
@@ -6683,9 +6687,11 @@ void sp_exc_resignal(const char *cls, const char *msg) {
   int no = !strcmp(cls, "Interrupt") ? SIGINT
          : (!strcmp(cls, "SignalException") && msg && !strcmp(msg, "SIGTERM")) ? SIGTERM : 0;
   if (!no) return;
+#ifndef SP_NO_SIGNALS
   fflush(NULL);   /* the buffered output exit() would have written */
   signal(no, SIG_DFL);
   raise(no);
+#endif
 }
 sp_Exception *sp_interrupt_new(const char *msg) {SP_GC_ROOT_STR(msg);
   sp_Exception *e = sp_exc_new("Interrupt", (msg && msg[0]) ? msg : "Interrupt");

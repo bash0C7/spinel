@@ -342,7 +342,7 @@ void sp_sig_unblock(int a, int b) {
   sigset_t m; sigemptyset(&m); sigaddset(&m, a); if (b) sigaddset(&m, b);
 #ifdef SP_THREADS
   pthread_sigmask(SIG_UNBLOCK, &m, 0);
-#else
+#elif !defined(SP_NO_SIGNALS)
   sigprocmask(SIG_UNBLOCK, &m, 0);   /* one thread: the same mask */
 #endif
 }
