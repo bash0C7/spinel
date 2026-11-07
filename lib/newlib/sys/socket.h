@@ -1,7 +1,11 @@
 #ifndef SP_NEWLIB_SYS_SOCKET_H
 #define SP_NEWLIB_SYS_SOCKET_H
+#if __has_include_next(<sys/socket.h>)
+#include_next <sys/socket.h>
+#else
 #include <sys/types.h>
 #include <stdint.h>
+#include <errno.h>
 typedef uint32_t socklen_t;
 typedef uint16_t sa_family_t;
 struct sockaddr { sa_family_t sa_family; char sa_data[14]; };
@@ -48,19 +52,21 @@ struct msghdr;
 #define SHUT_WR   1
 #define SHUT_RDWR 2
 struct linger { int l_onoff; int l_linger; };
-int socket(int, int, int);
-int socketpair(int, int, int, int[2]);
-int bind(int, const struct sockaddr *, socklen_t);
-int connect(int, const struct sockaddr *, socklen_t);
-int listen(int, int);
-int accept(int, struct sockaddr *, socklen_t *);
-int shutdown(int, int);
-ssize_t send(int, const void *, size_t, int);
-ssize_t recv(int, void *, size_t, int);
-ssize_t sendto(int, const void *, size_t, int, const struct sockaddr *, socklen_t);
-ssize_t recvfrom(int, void *, size_t, int, struct sockaddr *, socklen_t *);
-int getsockopt(int, int, int, void *, socklen_t *);
-int setsockopt(int, int, int, const void *, socklen_t);
-int getsockname(int, struct sockaddr *, socklen_t *);
-int getpeername(int, struct sockaddr *, socklen_t *);
+#define SP_NEWLIB_NOSOCK(...) ((void)(__VA_ARGS__), errno = ENOSYS, -1)
+#define socket(d, t, p) SP_NEWLIB_NOSOCK(d, t, p)
+#define socketpair(d, t, p, sv) SP_NEWLIB_NOSOCK(d, t, p, sv)
+#define bind(fd, a, l) SP_NEWLIB_NOSOCK(fd, a, l)
+#define connect(fd, a, l) SP_NEWLIB_NOSOCK(fd, a, l)
+#define listen(fd, b) SP_NEWLIB_NOSOCK(fd, b)
+#define accept(fd, a, l) SP_NEWLIB_NOSOCK(fd, a, l)
+#define shutdown(fd, h) SP_NEWLIB_NOSOCK(fd, h)
+#define send(fd, b, n, f) SP_NEWLIB_NOSOCK(fd, b, n, f)
+#define recv(fd, b, n, f) SP_NEWLIB_NOSOCK(fd, b, n, f)
+#define sendto(fd, b, n, f, a, l) SP_NEWLIB_NOSOCK(fd, b, n, f, a, l)
+#define recvfrom(fd, b, n, f, a, l) SP_NEWLIB_NOSOCK(fd, b, n, f, a, l)
+#define getsockopt(fd, lv, o, v, l) SP_NEWLIB_NOSOCK(fd, lv, o, v, l)
+#define setsockopt(fd, lv, o, v, l) SP_NEWLIB_NOSOCK(fd, lv, o, v, l)
+#define getsockname(fd, a, l) SP_NEWLIB_NOSOCK(fd, a, l)
+#define getpeername(fd, a, l) SP_NEWLIB_NOSOCK(fd, a, l)
+#endif
 #endif

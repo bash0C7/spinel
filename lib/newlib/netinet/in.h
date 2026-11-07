@@ -1,5 +1,8 @@
 #ifndef SP_NEWLIB_NETINET_IN_H
 #define SP_NEWLIB_NETINET_IN_H
+#if __has_include_next(<netinet/in.h>)
+#include_next <netinet/in.h>
+#else
 #include <sys/socket.h>
 typedef uint32_t in_addr_t;
 typedef uint16_t in_port_t;
@@ -20,8 +23,11 @@ struct sockaddr_in6 { sa_family_t sin6_family; in_port_t sin6_port; uint32_t sin
 #define INET_ADDRSTRLEN  16
 #define INET6_ADDRSTRLEN 46
 #define IPV6_V6ONLY 26
-uint32_t htonl(uint32_t);
-uint16_t htons(uint16_t);
-uint32_t ntohl(uint32_t);
-uint16_t ntohs(uint16_t);
+#ifndef htonl
+#define htonl(x) __htonl(x)
+#define htons(x) __htons(x)
+#define ntohl(x) __ntohl(x)
+#define ntohs(x) __ntohs(x)
+#endif
+#endif
 #endif

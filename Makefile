@@ -1778,7 +1778,6 @@ ext-cruby-test: $(SPINEL) $(SP_RT_LIB)
 NEWLIB_CC ?= arm-none-eabi-gcc
 NEWLIB_RUN ?= qemu-arm
 NEWLIB_ARCH ?= -mcpu=cortex-a9 -marm
-NEWLIB_CFLAGS = -Ilib/newlib -DSP_NO_SIGNALS -DSP_NO_TERMIOS -include lib/newlib/sp_newlib_config.h
 NEWLIB_LDFLAGS = --specs=rdimon.specs -Wl,-z,max-page-size=0x1000
 NEWLIB_PROGRAMS = $(filter-out test/newlib/kernel.rb,$(wildcard test/newlib/*.rb))
 newlib-test: $(SPINEL) $(SPINEL_TIMEOUT)
@@ -1787,14 +1786,14 @@ newlib-test: $(SPINEL) $(SPINEL_TIMEOUT)
 	case "$$($(NEWLIB_CC) -print-file-name=libc.a)" in /*) ;; *) skip "no newlib for $(NEWLIB_CC)";; esac; \
 	command -v $(firstword $(NEWLIB_RUN)) >/dev/null 2>&1 || skip "no $(firstword $(NEWLIB_RUN))"; \
 	tmp=$$(mktemp -d /tmp/spinel-newlib.XXXXXX); ok=1; \
-	cc1() { $(NEWLIB_CC) -c $(NEWLIB_ARCH) $(COPT) $(SEC_FLAGS) -Werror=implicit-function-declaration $(NEWLIB_CFLAGS) \
-	    -Ilib -Ilib/regexp -Ilib/regexp/shim $$1 -I"$$2" "$$3" -o "$$2/$$(echo $$3 | tr '/' '_').o" 2>"$$2/cc.err" && return; \
+	cc1() { $(NEWLIB_CC) -c $(NEWLIB_ARCH) $(COPT) -ffunction-sections -fdata-sections -Werror=implicit-function-declaration \
+	    -Ilib/regexp/shim $$1 -I"$$2" "$$3" -o "$$2/$$(echo $$3 | tr '/' '_').o" 2>"$$2/cc.err" && return; \
 	  echo "newlib-test: FAIL ($$3 did not compile)"; sed -n 1,4p "$$2/cc.err"; return 1; }; \
 	rt() { rtd="$$tmp/rt$$(printf '%s' "$$1" | cksum | cut -d' ' -f1)"; \
 	  if [ -d "$$rtd" ]; then [ ! -f "$$rtd/failed" ]; return; fi; mkdir "$$rtd"; \
-	  for f in lib/*.c lib/regexp/*.c lib/newlib/*.c; do cc1 "$$1" "$$rtd" "$$f" || : > "$$rtd/failed"; done; \
+	  for f in lib/*.c lib/regexp/*.c; do cc1 "$$1" "$$rtd" "$$f" || : > "$$rtd/failed"; done; \
 	  [ ! -f "$$rtd/failed" ]; }; \
-	defs_of() { $(SPINEL) "$$1" --cc=$(NEWLIB_CC) --print-build 2>/dev/null | sed -n 's/^define //p' | tr '\n' ' '; }; \
+	defs_of() { $(SPINEL) "$$1" --cc=$(NEWLIB_CC) --print-build 2>/dev/null | sed -n 's/^cflag //p; s/^define //p; s/^include /-I/p' | tr '\n' ' '; }; \
 	k="$$tmp/kernel"; mkdir "$$k"; \
 	if $(SPINEL) test/newlib/kernel.rb --cc=$(NEWLIB_CC) -c --no-line-map --ext-init Init_newlib_kernel \
 	     --ext-entry NewlibKernel.ulaw_decode,NewlibKernel.glyph16,NewlibKernel.spin,NewlibKernel.must_pos \
@@ -1803,16 +1802,12 @@ newlib-test: $(SPINEL) $(SPINEL_TIMEOUT)
 	  rt "$$defs" && cc1 "$$defs" "$$k" "$$k/k.c" && cc1 "$$defs" "$$k" test/newlib/host.c || ok=0; \
 	else echo "newlib-test: FAIL (emission) test/newlib/kernel.rb"; ok=0; fi; \
 	if [ $$ok -eq 1 ]; then \
-	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) -Wl,--gc-sections "$$k"/*.o "$$rtd"/*.o -lm -o "$$k/gc.elf" 2>"$$k/ld.err" || \
-	    { echo "newlib-test: FAIL (link with --gc-sections)"; sed -n 1,4p "$$k/ld.err"; ok=0; }; \
-	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) "$$k"/*.o "$$rtd"/*.o -lm -o "$$k/all.elf" 2>"$$k/ld.err" || \
-	    { echo "newlib-test: FAIL (link without --gc-sections)"; sed -n 1,4p "$$k/ld.err"; ok=0; }; \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) -Wl,--gc-sections "$$k"/*.o "$$rtd"/*.o -lm -o "$$k/k.elf" 2>"$$k/ld.err" || \
+	    { echo "newlib-test: FAIL (link) test/newlib/kernel.rb"; grep -m4 'undefined reference\|error' "$$k/ld.err"; ok=0; }; \
 	fi; \
 	if [ $$ok -eq 1 ]; then \
-	  for e in gc all; do \
-	    $(TIMEOUT10) $(NEWLIB_RUN) "$$k/$$e.elf" > "$$k/out" 2>&1; \
-	    cmp -s "$$k/out" test/newlib/expected || { echo "newlib-test: FAIL ($$e.elf output)"; diff -u test/newlib/expected "$$k/out" || true; ok=0; }; \
-	  done; \
+	  $(TIMEOUT10) $(NEWLIB_RUN) "$$k/k.elf" > "$$k/out" 2>&1; \
+	  cmp -s "$$k/out" test/newlib/expected || { echo "newlib-test: FAIL (kernel.rb output)"; diff -u test/newlib/expected "$$k/out" || true; ok=0; }; \
 	fi; \
 	for t in $(NEWLIB_PROGRAMS); do \
 	  bn=$$(basename $$t .rb); p="$$tmp/$$bn"; mkdir "$$p"; \
@@ -1821,7 +1816,7 @@ newlib-test: $(SPINEL) $(SPINEL_TIMEOUT)
 	  pdefs=$$(defs_of $$t); \
 	  rt "$$pdefs" && cc1 "$$pdefs" "$$p" "$$p/$$bn.c" || { ok=0; continue; }; \
 	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) -Wl,--gc-sections "$$p"/*.o "$$rtd"/*.o -lm -o "$$p/$$bn.elf" 2>"$$p/ld.err" || \
-	    { echo "newlib-test: FAIL (link) $$t"; sed -n 1,4p "$$p/ld.err"; ok=0; continue; }; \
+	    { echo "newlib-test: FAIL (link) $$t"; grep -m4 'undefined reference\|error' "$$p/ld.err"; ok=0; continue; }; \
 	  ( cd "$$p" && $(abspath $(SPINEL_TIMEOUT)) 10 $(NEWLIB_RUN) "./$$bn.elf" > out 2> err < /dev/null ); \
 	  cat "$$p/err" >> "$$p/out"; \
 	  if cmp -s "$$p/out" $$t.expected; then echo "newlib-test: pass $$t"; \

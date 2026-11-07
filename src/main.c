@@ -891,19 +891,26 @@ static void miscompile_errors(Str *cmd) {
              "-Werror=implicit-function-declaration ");
 }
 
-static int cc_newlib_without_threads(const char *cc) {
+enum { CC_NEWLIB = 1, CC_THREADS = 2, CC_OS = 4, CC_DIRENT = 8 };
+static int cc_newlib_probe(const char *cc) {
   char q[1024];
   snprintf(q, sizeof q, "printf '#include <unistd.h>\\n' | %s -E -dM -x c - 2>/dev/null", cc);
   FILE *fp = popen(q, "r");
   if (!fp) return 0;
-  int newlib = 0, threads = 0;
+  int got = 0;
   char line[512];
   while (fgets(line, sizeof line, fp)) {
-    if (!strncmp(line, "#define __NEWLIB__ ", 19)) newlib = 1;
-    if (!strncmp(line, "#define _POSIX_THREADS ", 23)) threads = 1;
+    if (!strncmp(line, "#define __NEWLIB__ ", 19)) got |= CC_NEWLIB;
+    if (!strncmp(line, "#define _POSIX_THREADS ", 23)) got |= CC_THREADS;
+    if (!strncmp(line, "#define __unix__ ", 17) || !strncmp(line, "#define __APPLE__ ", 18) ||
+        !strncmp(line, "#define _WIN32 ", 15)) got |= CC_OS;
   }
   pclose(fp);
-  return newlib && !threads;
+  if (got & CC_NEWLIB) {
+    snprintf(q, sizeof q, "printf '#include <dirent.h>\\n' | %s -fsyntax-only -x c - >/dev/null 2>&1", cc);
+    if (system(q) == 0) got |= CC_DIRENT;
+  }
+  return got;
 }
 
 int main(int argc, char **argv) {
@@ -1496,7 +1503,9 @@ int main(int argc, char **argv) {
       return 1;
     }
   }
-  if (uses_threads && !sp_streq(cc_cmd, "cc") && cc_newlib_without_threads(cc_cmd)) {
+  int cc_newlib = (!target_wasi && !sp_streq(cc_cmd, "cc")) ? cc_newlib_probe(cc_cmd) : 0;
+  int newlib_bare = (cc_newlib & CC_NEWLIB) && !(cc_newlib & CC_OS);
+  if (uses_threads && (newlib_bare || ((cc_newlib & CC_NEWLIB) && !(cc_newlib & CC_THREADS)))) {
     fprintf(stderr, "spinel: Thread, Mutex, Queue and ConditionVariable are not available on newlib\n");
     if (c_is_temp) remove(c_path);
     return 1;
@@ -1541,7 +1550,7 @@ int main(int argc, char **argv) {
      is 0.8% faster on the geometric mean, campfire's req/s is unchanged,
      and the binary is 2% larger. Both gcc and clang take the spelling; a
      wasm module has no cache line to aim at. */
-  if (!target_wasi) {
+  if (!target_wasi && !newlib_bare) {
     s_add(&cmd, "-falign-functions=64 -falign-loops=64 ");
     bi_put(&bi, "cflag", "-falign-functions=64"); bi_put(&bi, "cflag", "-falign-loops=64");
   }
@@ -1609,6 +1618,17 @@ int main(int argc, char **argv) {
     if (!exc_abort)
       for (size_t wi = 0; wi < sizeof wcfl / sizeof wcfl[0]; wi++) { s_add(&cmd, wcfl[wi]); s_add(&cmd, " "); bi_put(&bi, "cflag", wcfl[wi]); }
     if (exc_abort) { s_add(&cmd, "-DSP_EXC_ABORT "); bi_put(&bi, "define", "-DSP_EXC_ABORT"); }
+  }
+  if (newlib_bare) {
+    char ni[4096];
+    snprintf(ni, sizeof ni, "%s%cnewlib", lib_dir, PATH_SEP);
+    snprintf(tmp, sizeof tmp, "-I\"%s\" ", ni); s_add(&cmd, tmp);
+    bi_put(&bi, "include", ni);
+    static const char *const ndefs[] = { "-DSP_NO_SIGNALS", "-DSP_NO_TERMIOS" };
+    for (size_t k = 0; k < sizeof ndefs / sizeof ndefs[0]; k++) { s_add(&cmd, ndefs[k]); s_add(&cmd, " "); bi_put(&bi, "define", ndefs[k]); }
+    if (!(cc_newlib & CC_DIRENT)) { s_add(&cmd, "-DSP_NO_DIRENT "); bi_put(&bi, "define", "-DSP_NO_DIRENT"); }
+    snprintf(tmp, sizeof tmp, "-include \"%s%csp_newlib_config.h\" ", ni, PATH_SEP); s_add(&cmd, tmp);
+    snprintf(tmp, sizeof tmp, "-include %s%csp_newlib_config.h", ni, PATH_SEP); bi_put(&bi, "cflag", tmp);
   }
 #if defined(_WIN32)
   if (!target_wasi) add_platform_flags(&cmd, &bi, SPINEL_PLATFORM_CFLAGS, lib_dir);

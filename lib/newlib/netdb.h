@@ -1,5 +1,8 @@
 #ifndef SP_NEWLIB_NETDB_H
 #define SP_NEWLIB_NETDB_H
+#if __has_include_next(<netdb.h>)
+#include_next <netdb.h>
+#else
 #include <sys/socket.h>
 struct addrinfo {
   int ai_flags, ai_family, ai_socktype, ai_protocol;
@@ -22,8 +25,9 @@ struct addrinfo {
 #define EAI_NONAME   (-2)
 #define EAI_SERVICE  (-8)
 #define EAI_SOCKTYPE (-7)
-int getaddrinfo(const char *, const char *, const struct addrinfo *, struct addrinfo **);
-void freeaddrinfo(struct addrinfo *);
-const char *gai_strerror(int);
-int getnameinfo(const struct sockaddr *, socklen_t, char *, socklen_t, char *, socklen_t, int);
+#define getaddrinfo(n, s, h, r) ((void)(n), (void)(s), (void)(h), (void)(r), EAI_FAIL)
+#define freeaddrinfo(a) ((void)(a))
+#define gai_strerror(e) ((void)(e), "name resolution is not available")
+#define getnameinfo(a, al, h, hl, s, sl, f) ((void)(a), (void)(al), (void)(h), (void)(hl), (void)(s), (void)(sl), (void)(f), EAI_FAIL)
+#endif
 #endif

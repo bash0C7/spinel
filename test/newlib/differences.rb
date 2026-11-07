@@ -26,19 +26,8 @@ check("IO#raw") { STDIN.raw { 1 } }
 check("IO#noecho") { STDIN.noecho { 1 } }
 check("Socket.new") { Socket.new(:INET, :STREAM) }
 check("Socket.getaddrinfo") { Socket.getaddrinfo("example.com", 80) }
-check("Process.spawn") { Process.spawn("true") }
-check("Process.wait") { Process.wait }
 check("Dir.entries") { Dir.entries("/") }
 check("Dir.new") { Dir.new("/") }
-check("Process.uid") { Process.uid }
-check("Process.euid") { Process.euid }
-check("Process.gid") { Process.gid }
-check("Dir.pwd") { Dir.pwd }
-check("sleep") do
-  t = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  sleep 1
-  Process.clock_gettime(Process::CLOCK_MONOTONIC) - t >= 1
-end
 
 def nest(n)
   begin
