@@ -58,7 +58,7 @@ RBS_SRC      = $(wildcard $(RBS_DIR)/src/*.c) $(wildcard $(RBS_DIR)/src/util/*.c
 RBS_OBJ      = $(patsubst $(RBS_DIR)/src/%.c,build/rbs/%.o,$(RBS_SRC))
 RBS_LIB      = build/librbs.a
 
-.PHONY: ty-setter-check imemo-shadow-test imemo-shadow-corpus int-min-test all hooks share-strings-test line-map-check unit-stability-test incremental-test incremental-bench gate-tool-test regexp wasm-rt wasm-test rbs_extract rbs-test rbs-seed-test inline-rbs-test rbs-seed-extractor cident plan-check-test timing-test shadow-check signal-default-test source-marker-test magic-comment-test repr-check-test run-scale-test gate-costs arm-check-test traits-check-test poly-cold-test bop-arity-check-test bop-callbacks-test bop-share-check-test share-spec-check bop-callbacks-check arity-spec-check value-edges-check value-edges-regen implied-calls-check implied-calls-regen implied-calls-test lower-rows-check node-kinds-check node-kinds-regen package-facts-check package-facts-regen value-pos-test re-lit-test reject-test cli-opts-test link-names-test reach-test defer-refusals-test check-stores-test backtrace-test gc-minor-test thread-puts-test ext-test ext-cruby-test alloc-report-test rubyspec rubyspec-gate spin-check \ repr-diff c-costs alloc-diff \
+.PHONY: ty-setter-check imemo-shadow-test imemo-shadow-corpus int-min-test all hooks share-strings-test line-map-check unit-stability-test incremental-test incremental-bench gate-tool-test regexp wasm-rt wasm-test rbs_extract rbs-test rbs-seed-test inline-rbs-test rbs-seed-extractor cident plan-check-test timing-test shadow-check signal-default-test source-marker-test magic-comment-test repr-check-test run-scale-test gate-costs arm-check-test traits-check-test poly-cold-test bop-arity-check-test bop-callbacks-test bop-share-check-test share-spec-check bop-callbacks-check arity-spec-check value-edges-check value-edges-regen implied-calls-check implied-calls-regen implied-calls-test lower-rows-check node-kinds-check node-kinds-regen package-facts-check package-facts-regen value-pos-test re-lit-test reject-test cli-opts-test link-names-test reach-test defer-refusals-test check-stores-test backtrace-test gc-minor-test thread-puts-test ext-test ext-cruby-test newlib-test alloc-report-test rubyspec rubyspec-gate spin-check \ repr-diff c-costs alloc-diff \
         test test-run clean-test-results regen-rbs-expected \
         regen-expected regen-expected-err bench optcarrot gate gate-full check gate-legs gate-test gate-bench gc-phases-test gc-stress-test gc-str-major-test gc-str-budget-test threaded-render-test gc-locality-test test-corpus test-corpus-summary \
         gate-optcarrot rubyboy gate-rubyboy scale-test clean install uninstall deps tools
@@ -1774,6 +1774,64 @@ ext-cruby-test: $(SPINEL) $(SP_RT_LIB)
 	fi; \
 	rm -rf "$$tmp"; \
 	if [ $$ok -eq 1 ]; then echo "ext-cruby-test: pass"; else exit 1; fi
+
+NEWLIB_CC ?= arm-none-eabi-gcc
+NEWLIB_RUN ?= qemu-arm
+NEWLIB_ARCH ?= -mcpu=cortex-a9 -marm
+NEWLIB_CFLAGS = -Ilib/newlib -DSP_NO_SIGNALS -DSP_NO_TERMIOS -include lib/newlib/sp_newlib_config.h
+NEWLIB_LDFLAGS = --specs=rdimon.specs -Wl,-z,max-page-size=0x1000
+NEWLIB_PROGRAMS = $(filter-out test/newlib/kernel.rb,$(wildcard test/newlib/*.rb))
+newlib-test: $(SPINEL) $(SPINEL_TIMEOUT)
+	@skip() { if [ -n "$(NEWLIB_REQUIRED)" ]; then echo "newlib-test: FAIL ($$1, and NEWLIB_REQUIRED is set)"; exit 1; fi; echo "newlib-test: skipped ($$1)"; exit 0; }; \
+	command -v $(NEWLIB_CC) >/dev/null 2>&1 || skip "no $(NEWLIB_CC)"; \
+	case "$$($(NEWLIB_CC) -print-file-name=libc.a)" in /*) ;; *) skip "no newlib for $(NEWLIB_CC)";; esac; \
+	command -v $(firstword $(NEWLIB_RUN)) >/dev/null 2>&1 || skip "no $(firstword $(NEWLIB_RUN))"; \
+	tmp=$$(mktemp -d /tmp/spinel-newlib.XXXXXX); ok=1; \
+	cc1() { $(NEWLIB_CC) -c $(NEWLIB_ARCH) $(COPT) $(SEC_FLAGS) -Werror=implicit-function-declaration $(NEWLIB_CFLAGS) \
+	    -Ilib -Ilib/regexp -Ilib/regexp/shim $$1 -I"$$2" "$$3" -o "$$2/$$(echo $$3 | tr '/' '_').o" 2>"$$2/cc.err" && return; \
+	  echo "newlib-test: FAIL ($$3 did not compile)"; sed -n 1,4p "$$2/cc.err"; return 1; }; \
+	rt() { rtd="$$tmp/rt$$(printf '%s' "$$1" | cksum | cut -d' ' -f1)"; \
+	  if [ -d "$$rtd" ]; then [ ! -f "$$rtd/failed" ]; return; fi; mkdir "$$rtd"; \
+	  for f in lib/*.c lib/regexp/*.c lib/newlib/*.c; do cc1 "$$1" "$$rtd" "$$f" || : > "$$rtd/failed"; done; \
+	  [ ! -f "$$rtd/failed" ]; }; \
+	defs_of() { $(SPINEL) "$$1" --cc=$(NEWLIB_CC) --print-build 2>/dev/null | sed -n 's/^define //p' | tr '\n' ' '; }; \
+	k="$$tmp/kernel"; mkdir "$$k"; \
+	if $(SPINEL) test/newlib/kernel.rb --cc=$(NEWLIB_CC) -c --no-line-map --ext-init Init_newlib_kernel \
+	     --ext-entry NewlibKernel.ulaw_decode,NewlibKernel.glyph16,NewlibKernel.spin,NewlibKernel.must_pos \
+	     -o "$$k/k.c" >/dev/null 2>&1; then \
+	  defs=$$(defs_of test/newlib/kernel.rb); \
+	  rt "$$defs" && cc1 "$$defs" "$$k" "$$k/k.c" && cc1 "$$defs" "$$k" test/newlib/host.c || ok=0; \
+	else echo "newlib-test: FAIL (emission) test/newlib/kernel.rb"; ok=0; fi; \
+	if [ $$ok -eq 1 ]; then \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) -Wl,--gc-sections "$$k"/*.o "$$rtd"/*.o -lm -o "$$k/gc.elf" 2>"$$k/ld.err" || \
+	    { echo "newlib-test: FAIL (link with --gc-sections)"; sed -n 1,4p "$$k/ld.err"; ok=0; }; \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) "$$k"/*.o "$$rtd"/*.o -lm -o "$$k/all.elf" 2>"$$k/ld.err" || \
+	    { echo "newlib-test: FAIL (link without --gc-sections)"; sed -n 1,4p "$$k/ld.err"; ok=0; }; \
+	fi; \
+	if [ $$ok -eq 1 ]; then \
+	  for e in gc all; do \
+	    $(TIMEOUT10) $(NEWLIB_RUN) "$$k/$$e.elf" > "$$k/out" 2>&1; \
+	    cmp -s "$$k/out" test/newlib/expected || { echo "newlib-test: FAIL ($$e.elf output)"; diff -u test/newlib/expected "$$k/out" || true; ok=0; }; \
+	  done; \
+	fi; \
+	for t in $(NEWLIB_PROGRAMS); do \
+	  bn=$$(basename $$t .rb); p="$$tmp/$$bn"; mkdir "$$p"; \
+	  if ! $(SPINEL) $$t --cc=$(NEWLIB_CC) -c --no-line-map -o "$$p/$$bn.c" >/dev/null 2>"$$p/build"; then \
+	    echo "newlib-test: FAIL (emission) $$t"; head -3 "$$p/build"; ok=0; continue; fi; \
+	  pdefs=$$(defs_of $$t); \
+	  rt "$$pdefs" && cc1 "$$pdefs" "$$p" "$$p/$$bn.c" || { ok=0; continue; }; \
+	  $(NEWLIB_CC) $(NEWLIB_ARCH) $(NEWLIB_LDFLAGS) -Wl,--gc-sections "$$p"/*.o "$$rtd"/*.o -lm -o "$$p/$$bn.elf" 2>"$$p/ld.err" || \
+	    { echo "newlib-test: FAIL (link) $$t"; sed -n 1,4p "$$p/ld.err"; ok=0; continue; }; \
+	  ( cd "$$p" && $(abspath $(SPINEL_TIMEOUT)) 10 $(NEWLIB_RUN) "./$$bn.elf" > out 2> err < /dev/null ); \
+	  cat "$$p/err" >> "$$p/out"; \
+	  if cmp -s "$$p/out" $$t.expected; then echo "newlib-test: pass $$t"; \
+	  else echo "newlib-test: FAIL $$t"; diff -u $$t.expected "$$p/out" | head -20; ok=0; fi; \
+	done; \
+	if $(SPINEL) -e 'Thread.new { }.join' --cc=$(NEWLIB_CC) --print-build >/dev/null 2>"$$tmp/thread.err" || \
+	   ! grep -q 'not available on newlib' "$$tmp/thread.err"; then \
+	  echo "newlib-test: FAIL (a Thread program was not refused)"; ok=0; fi; \
+	rm -rf "$$tmp"; \
+	if [ $$ok -eq 1 ]; then echo "newlib-test: pass"; else exit 1; fi
 
 # wrap-test: test/wrap/*.rb are compiled with --int-overflow=wrap and run
 # against their .expected, which is Spinel's own: CRuby never wraps, so a

@@ -536,6 +536,7 @@ The runtime is POSIX-flavoured and targets POSIX platforms:
 | *BSD | Expected to work; not in CI | clang |
 | Windows | Use [WSL](https://learn.microsoft.com/windows/wsl/) (builds/runs as Linux) | gcc, clang |
 | Windows, native (x64) | Community-maintained, best effort; may lag behind master; see [docs/windows.md](docs/windows.md) | MinGW-w64 gcc (UCRT) |
+| Bare-metal boards with newlib (Arm Cortex-M, -A) | Community-maintained, best effort; may lag behind master; the runtime only, built by the board's build; see [docs/newlib.md](docs/newlib.md) | arm-none-eabi-gcc |
 
 Every PR runs `ubuntu-latest / gcc`, `ubuntu-latest / clang`, and
 `macos-latest / clang` jobs end-to-end (parser build, codegen build,
@@ -544,7 +545,8 @@ on Windows: it builds and runs there as a native Linux toolchain. A native
 build with MinGW-w64 gcc (as MSYS2 and RubyInstaller's Devkit ship it) is
 community-maintained and best effort: the runtime is written against POSIX,
 and `lib/win32/` supplies the POSIX surface MinGW leaves out, the
-arrangement `lib/wasi/` is for WebAssembly, so the POSIX build is
+arrangement `lib/wasi/` is for WebAssembly and `lib/newlib/` for a
+bare-metal board's newlib, so the POSIX build is
 unchanged by it. CI does not run it; it may lag behind master, and if it
 gets in the way of a POSIX change it may be removed. See
 [docs/windows.md](docs/windows.md).

@@ -1,0 +1,51 @@
+round 0 log crc=f245 report crc=6865
+hum   n= 48 min= -10.00 max=  29.90 avg=   8.21
+press n= 39 min= -10.10 max=  29.90 avg=   7.62
+temp  n= 50 min=  -9.20 max=  29.90 avg=  10.74
+moving avg (last 8): 6.825
+errors: 13
+  line 1: temp: bad number "oops"
+  line 15: press: bad number "oops"
+  line 45: press: bad number "oops"
+round 1 log crc=442a report crc=4859
+hum   n= 36 min=  -8.30 max=  27.70 avg=   9.93
+press n= 38 min=  -9.10 max=  29.90 avg=  13.79
+temp  n= 53 min=  -9.20 max=  28.80 avg=  13.92
+moving avg (last 8): 17.975
+errors: 23
+  line 4: temp: bad number "oops"
+  line 7: hum: missing value
+  line 9: press: bad number "oops"
+round 2 log crc=5f06 report crc=9ba4
+round 3 log crc=5c86 report crc=15e3
+round 4 log crc=c1c3 report crc=49e4
+round 5 log crc=7fa2 report crc=a34d
+round 6 log crc=264b report crc=689c
+round 7 log crc=6e73 report crc=d5d9
+round 8 log crc=3d35 report crc=e1f7
+round 9 log crc=7a86 report crc=e936
+round 10 log crc=d07a report crc=aba0
+round 11 log crc=0f28 report crc=797c
+round 12 log crc=25f8 report crc=ac25
+round 13 log crc=99d7 report crc=3675
+round 14 log crc=be6e report crc=ffe0
+round 15 log crc=84af report crc=2d05
+round 16 log crc=9fef report crc=f3e5
+round 17 log crc=b80f report crc=1daf
+round 18 log crc=a2ff report crc=71d6
+round 19 log crc=8d93 report crc=09ce
+round 20 log crc=a98e report crc=7402
+round 21 log crc=3bc6 report crc=dae1
+round 22 log crc=3a78 report crc=ec6e
+round 23 log crc=69f2 report crc=404b
+hum   n= 49 min= -10.10 max=  28.80 avg=   9.19
+press n= 45 min= -10.00 max=  29.90 avg=  11.83
+temp  n= 39 min= -10.10 max=  28.70 avg=   5.83
+moving avg (last 8): 7.813
+errors: 17
+  line 9: hum: bad number "oops"
+  line 18: press: bad number "oops"
+  line 53: temp: missing value
+parse_value "23.5" -> 23.500
+parse_value "12.x" raised SensorLog::Malformed: bad number "12.x"
+parse_value "" raised SensorLog::Malformed: missing value

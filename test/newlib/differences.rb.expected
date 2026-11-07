@@ -1,0 +1,27 @@
+Integer#size: 4
+literal 4_000_000_000: 4000000000
+literal 0xdeadbeef: 3735928559
+2**31 - 1 + 1: 2147483648
+IO::Buffer.map: SystemCallError: Function not implemented @ IO::Buffer.map
+Signal.trap: :ok
+Fiber.new.resume: FiberError: failed to allocate fiber stack
+Array#each.next: 1
+Range#each.next: 1
+each_slice.next: [1, 2]
+Enumerator.new.next: FiberError: failed to allocate fiber stack
+Enumerator.new.take: FiberError: failed to allocate fiber stack
+IO#raw: Errno::ENOTTY: Not a character device
+IO#noecho: Errno::ENOTTY: Not a character device
+Socket.new: Errno::ENOTSUP: Not supported @ socket - 
+Socket.getaddrinfo: Socket::ResolutionError: getaddrinfo: name resolution is not available on newlib
+Process.spawn: SystemCallError: pipe failed - Function not implemented
+Process.wait: Errno::ECHILD: No child processes
+Dir.entries: Errno::ENOENT: No such file or directory @ dir_initialize - /
+Dir.new: Errno::ENOENT: No such file or directory @ dir_initialize - /
+Process.uid: 0
+Process.euid: 0
+Process.gid: 0
+Dir.pwd: "/"
+sleep: true
+begin nested 8: :bottom
+stack level too deep (SystemStackError)
