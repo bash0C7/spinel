@@ -25,7 +25,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include "sp_compat.h"
+#include "../sp_compat.h"
 
 #define PATH_MAX 4096
 #define SP_NEWLIB_NOSYS(...) { (void)(__VA_ARGS__); errno = ENOSYS; return -1; }
